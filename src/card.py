@@ -29,3 +29,6 @@ class Card:
         else:
             rank_str = str(self.rank)
         return f"{rank_str} of {self.suit.value}"
+    
+    def __repr__(self):
+        return self.__str__()

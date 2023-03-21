@@ -1,6 +1,7 @@
 from deck import Deck
 from card import *
 from enum import Enum
+import poker_hands
 
 class Action(Enum):
     FOLD = 'fold'
@@ -25,7 +26,8 @@ class PokerGame:
         self.community_cards = []
         self.small_blind = small_blind
         self.big_blind = big_blind
-        self.dealer = players[0]
+        self.dealer_pos = 0
+        self.dealer = players[self.dealer_pos]
         self.pot = 0
         self.current_era = Era.BEGINNING
         self.next_era()
@@ -80,7 +82,43 @@ class PokerGame:
     
     def showdown(self):
         self.current_era = Era.SHOWDOWN
-        ...
+        print("FUCKFUCK")
+
+        # Determine the best hand for each player
+        player_hands = {}
+        for player in self.active_players:
+            full_hand = player.hand + self.community_cards
+            player_hands[player] = poker_hands.best_hand(full_hand)
+
+        # Find the winner(s) of the showdown
+        winners = []
+        best_hand_found = None
+        print(player_hands)
+        for player, hand in player_hands.items():
+            if not best_hand_found or hand > best_hand_found:
+                winners = [player]
+                best_hand_found = hand
+            elif hand == best_hand_found:
+                winners.append(player)
+
+        # Distribute the pot among the winners
+        print(winners)
+        split_pot = self.pot // len(winners)
+        for winner in winners:
+            winner.stack += split_pot
+            print(winner.stack)
+            print(f"{winner.name} wins {split_pot} with a {best_hand_found.type}: {best_hand_found.cards}")
+            
+
+    def next_hand(self):
+        self.active_players = self.players.copy()
+        self.deck = Deck()
+        self.community_cards = []
+        self.dealer_pos = (self.dealer_pos + 1) % len(self.players)
+        self.dealer = self.players[self.dealer_pos]
+        self.pot = 0
+        self.current_era = Era.BEGINNING
+        self.next_era()
 
     def next_player(self, player):
         player_index = self.active_players.index(player)
@@ -136,8 +174,9 @@ class PokerGame:
             self.current_player.wager(call_amount)
 
         if len(self.active_players) == 1:
-            # next game
-            pass
+            self.clear_wagers()
+            self.active_players[0].stack += self.pot
+            self.next_hand()
         if self.last_player == self.current_player:
             self.next_era()
         else:

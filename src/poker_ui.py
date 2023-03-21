@@ -1,6 +1,6 @@
 import os
 import pygame
-from poker_game import PokerGame, Action
+from poker_game import PokerGame, Action, Era
 from player import Player
 import math
 from button import Button
@@ -16,6 +16,7 @@ class PokerUI:
         self.card_images = {}
         self.init_ui()
         self.load_card_images()
+        self.load_table_image()
 
     def init_ui(self):
         pygame.init()
@@ -52,13 +53,16 @@ class PokerUI:
         for suit in suits:
             for rank in ranks:
                 image_name = f"{rank}_of_{suit}.png"
-                image_path = os.path.join("card_images", image_name)
+                image_path = os.path.join("res/card_images", image_name)
                 self.card_images[f"{rank}_of_{suit}"] = pygame.image.load(image_path).convert_alpha()
 
+    def load_table_image(self):
+        image_path = os.path.join("res", "table_image.png")
+        self.table_image = pygame.image.load(image_path).convert_alpha()
 
     def draw_cards(self, cards, position):
-        card_width = 40
-        margin = 5
+        card_width = 45
+        margin = 10
         x, y = position
 
         for i, card in enumerate(cards):
@@ -77,7 +81,16 @@ class PokerUI:
     def draw_game(self):
         self.input_active = False
         self.update_game_state()
-        self.game_surface.fill(colors.BLACK)
+        self.game_surface.fill((34, 32, 33))
+
+
+        original_width, original_height = self.table_image.get_size()
+        aspect_ratio = float(original_height) / float(original_width)
+        table_width = self.screen_size[0]
+        table_height = int(table_width * aspect_ratio)
+
+        scaled_table_image = pygame.transform.smoothscale(self.table_image, (table_width, table_height))
+        self.game_surface.blit(scaled_table_image, scaled_table_image.get_rect(center = (self.screen_size[0] // 2, self.screen_size[1] // 2)))
 
         center_x, center_y = self.screen_size[0] // 2, self.screen_size[1] // 3
         radius = min(self.screen_size) // 3
@@ -99,11 +112,11 @@ class PokerUI:
             self.draw_text(f"{player.name}", (x, y), color=color)
             self.draw_text(f"Stack: {player.stack}", (x, y + 20), color=color)
             self.draw_text(f"Wager: {player.current_wager}", (x, y + 40), color=color)
-            self.draw_cards(player.hand, (x, y + 80))
+            self.draw_cards(player.hand, (x, y + 90))
 
         self.draw_cards(self.poker_game.community_cards, (center_x, center_y + 100))
         
-        self.draw_text(f"Pot size: {self.poker_game.pot}", (center_x, center_y))
+        self.draw_text(f"{self.poker_game.pot}", (center_x, center_y + 25))
         # self.darken_background()
 
 
@@ -183,6 +196,7 @@ class PokerUI:
                         else:
                             self.poker_game.perform_action(button.action)
                             self.draw_game()
+
                         break
 
 
@@ -194,7 +208,7 @@ class PokerUI:
 
 if __name__ == "__main__":
     # Initialize your PokerGame instance here, e.g., poker_game = PokerGame(...)
-    players = [Player("Max", 2000), Player("Maxim", 2000),Player("Bryan", 2000), Player("Andrew", 2000),Player("Carl", 2000), Player("Taichi", 2000)]
+    players = [Player("Kan", 2000), Player("Maxim", 2000), Player("Andrew", 2000)]
     poker_game = PokerGame(players)
     poker_ui = PokerUI(poker_game)
     poker_ui.run()
