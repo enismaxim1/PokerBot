@@ -9,6 +9,7 @@ class Action(Enum):
     BET = 'bet'
     CALL = 'call'
     RAISE = 'raise'
+    ALL_IN = 'all in'
 
 class Era(Enum):
     BEGINNING = 'beginning'
@@ -16,35 +17,50 @@ class Era(Enum):
     FLOP = 'flop'
     TURN = 'turn'
     RIVER = 'river'
-    SHOWDOWN = 'showdown'
+    PAYOUT = 'payout'
 
 class PokerGame:
     def __init__(self, players, small_blind = 5, big_blind = 10):
+        self.initialize_game(players, small_blind, big_blind)
+        self.dealer_pos = 0
+        self.dealer = players[self.dealer_pos]
+    
+    def initialize_game(self, players, small_blind, big_blind):
         self.players = players
         self.active_players = players.copy()
+        self.unfolded_players = players.copy()
+        self.clear_wagers()
+        self.action_finished = True
         self.deck = Deck()
         self.community_cards = []
         self.small_blind = small_blind
         self.big_blind = big_blind
-        self.dealer_pos = 0
-        self.dealer = players[self.dealer_pos]
         self.pot = 0
         self.current_era = Era.BEGINNING
-        self.next_era()
+        self.current_player = None
 
     def next_era(self):
-        self.clear_wagers()
         era = self.current_era
-        if era == Era.BEGINNING:
-            self.preflop()
-        elif era == Era.PREFLOP:
-            self.flop()
-        elif era == Era.FLOP:
-            self.turn()
-        elif era == Era.TURN:
-            self.river()
-        elif era == Era.RIVER:
-            self.showdown()
+        self.update_wagers()
+
+        if era == Era.PAYOUT:
+            self.next_hand()
+        # if everyone else folded, skip to payout era
+        elif len(self.unfolded_players) == 1:
+            payout_map = {self.unfolded_players[0]: self.pot}
+            self.payout(payout_map)
+        else:
+            if era == Era.BEGINNING:
+                self.preflop()
+            elif era == Era.PREFLOP:
+                self.flop()
+            elif era == Era.FLOP:
+                self.turn()
+            elif era == Era.TURN:
+                self.river()
+            elif era == Era.RIVER:
+                payout_map = self.showdown()
+                self.payout(payout_map)
 
     def deal_hole_cards(self):
         for player in self.players:
@@ -54,6 +70,8 @@ class PokerGame:
         self.community_cards.extend(self.deck.deal(num_cards))
 
     def preflop(self):
+        if len(self.active_players) > 1:
+            self.action_finished = False
         self.current_era = Era.PREFLOP
         self.deck.shuffle()
         sb = self.next_player(self.dealer)
@@ -64,61 +82,103 @@ class PokerGame:
         self.current_player = self.next_player(bb)
         self.last_player = bb
         self.deal_hole_cards()
+        self.print_game_state()
 
     def flop(self):
-        self.fix_postflop_positions()
+        if len(self.active_players) > 1:
+            self.action_finished = False
+            self.fix_postflop_positions()
         self.current_era = Era.FLOP
         self.deal_community_cards(3)
 
     def turn(self):
-        self.fix_postflop_positions()
+        if len(self.active_players) > 1:
+            self.action_finished = False
+            self.fix_postflop_positions()
         self.current_era = Era.TURN
         self.deal_community_cards(1)
 
     def river(self):
-        self.fix_postflop_positions()
+        if len(self.active_players) > 1:
+            self.action_finished = False
+            self.fix_postflop_positions()
         self.current_era = Era.RIVER
         self.deal_community_cards(1)
     
-    def showdown(self):
-        self.current_era = Era.SHOWDOWN
-        print("FUCKFUCK")
+    def payout(self, payout_map):
+        print("payout reached")
+        print(payout_map)
+        for player in payout_map:
+            print(player, f"previous: {player.previous_wager}, current: {player.current_wager}")
+        self.payout_map = payout_map
+        for player, payout in payout_map.items():
+            player.stack += payout
+        self.pot = 0
 
+        self.current_era = Era.PAYOUT
+    
+    def showdown(self):
+        payout_map = {}
+
+        # find all players invested in the pots
+        all_player_wagers = {player: player.previous_wager for player in self.players}
+        unfolded_player_wagers = {player: player.previous_wager for player in self.unfolded_players}
+
+        # find amount these players have invested in their respective pots
+        bets = set([player.previous_wager for player in self.unfolded_players]) 
+        sorted_bets = list(sorted(bets))
         # Determine the best hand for each player
         player_hands = {}
-        for player in self.active_players:
+        for player in self.unfolded_players:
             full_hand = player.hand + self.community_cards
             player_hands[player] = poker_hands.best_hand(full_hand)
+        
+        print("bets",sorted_bets)
 
-        # Find the winner(s) of the showdown
-        winners = []
-        best_hand_found = None
-        print(player_hands)
-        for player, hand in player_hands.items():
-            if not best_hand_found or hand > best_hand_found:
-                winners = [player]
-                best_hand_found = hand
-            elif hand == best_hand_found:
-                winners.append(player)
+        # loop through all pots
+        for bet in sorted_bets:
+            # determine pot size
+            pot_size = 0
+            for player in self.players:
+                amount = min(bet, all_player_wagers[player])
+                pot_size += amount
+                all_player_wagers[player] -= amount
+            print(f"bet: {bet}, pot size: {pot_size}")
+            # eligible winners are unfolded players who have bet this much
+            eligible_players = [player for player in self.unfolded_players if unfolded_player_wagers[player] >= bet]
 
-        # Distribute the pot among the winners
-        print(winners)
-        split_pot = self.pot // len(winners)
-        for winner in winners:
-            winner.stack += split_pot
-            print(winner.stack)
-            print(f"{winner.name} wins {split_pot} with a {best_hand_found.type}: {best_hand_found.cards}")
-            
+            # Find the winner(s) of the showdown
+            winners = []
+            best_hand_found = None
+            for player in eligible_players:
+                hand = player_hands[player]
+                if not best_hand_found or hand > best_hand_found:
+                    winners = [player]
+                    best_hand_found = hand
+                elif hand == best_hand_found:
+                    winners.append(player)
+
+            # Distribute the pot among the winners
+            print(winners)
+            split_pot = pot_size // len(winners)
+            for winner in winners:
+                if winner not in payout_map:
+                    payout_map[winner] = 0
+                payout_map[winner] += split_pot
+                print(winner.stack)
+                print(f"{winner.name} wins {split_pot} with a {best_hand_found.type}: {best_hand_found.cards}")
+
+        return payout_map
+
+
 
     def next_hand(self):
-        self.active_players = self.players.copy()
-        self.deck = Deck()
-        self.community_cards = []
+        self.initialize_game(self.players, self.small_blind, self.big_blind)
+        for player in self.players:
+            if player.stack == 0:
+                player.stack = self.big_blind * 200
         self.dealer_pos = (self.dealer_pos + 1) % len(self.players)
         self.dealer = self.players[self.dealer_pos]
-        self.pot = 0
-        self.current_era = Era.BEGINNING
-        self.next_era()
 
     def next_player(self, player):
         player_index = self.active_players.index(player)
@@ -142,28 +202,36 @@ class PokerGame:
             print(f"Player {i}: {player.name}, Stack: {player.stack}, Hand: {player.hand}")
         print(f"Current bet: {self.current_bet}")
 
-    def clear_wager(self, player):
-        self.pot += player.current_wager
-        player.current_wager = 0
-
-    def clear_wagers(self):
-        for player in self.active_players:
-           self.clear_wager(player)
+    def update_wagers(self):
+        for player in self.players:
+           self.pot += player.current_wager
+           player.update_wager()
         self.current_bet = 0
 
+    def clear_wagers(self):
+        for player in self.players:
+            player.previous_wager = 0
+            player.current_wager = 0
+
+    # removes player from the action
+    def remove_player(self, player):
+        # fix dealer position, if necessary
+        if player == self.dealer:
+            self.dealer = self.previous_player(player)
+        self.active_players.remove(player)
 
     def perform_action(self, action, amount = 0):
-        self.print_game_state()
         next_player = self.next_player(self.current_player)
-
         if action == Action.FOLD:
-            # fix dealer position, if necessary
-            if self.current_player == self.dealer:
-                self.dealer = self.previous_player(self.current_player)
-            self.active_players.remove(self.current_player)
-            self.clear_wager(self.current_player)
+            self.remove_player(self.current_player)
+            self.unfolded_players.remove(self.current_player)
 
         elif action == Action.BET or action == Action.RAISE:
+            difference = amount - self.current_player.current_wager
+            if difference > self.current_player.stack:
+                return False
+            if amount < 2 * self.current_bet and difference != self.current_player.stack:
+                return False
             self.raise_bet(self.current_player, amount)
 
         elif action == Action.CHECK:
@@ -173,26 +241,28 @@ class PokerGame:
             call_amount = self.current_bet - self.current_player.current_wager
             self.current_player.wager(call_amount)
 
-        if len(self.active_players) == 1:
-            self.clear_wagers()
-            self.active_players[0].stack += self.pot
-            self.next_hand()
+        elif action == Action.ALL_IN:
+            self.raise_bet(self.current_player, self.current_player.stack + self.current_player.current_wager)
+            
+        if self.current_player.stack == 0:
+            self.remove_player(self.current_player)
+
         if self.last_player == self.current_player:
-            self.next_era()
+            self.current_player = None
+            self.action_finished = True
         else:
             self.current_player = next_player
 
+        return True
+
     
     def raise_bet(self, player, amount):
-        # TODO: consider cases where raise amount is smaller than bet (like in an all-in)
-        if amount < self.current_bet:
-            raise Exception("Cannot raise to smaller than existing pot size")
-        self.current_bet = amount
+        self.current_bet = max(self.current_bet, amount)
         player.wager(amount - player.current_wager)
         self.last_player = self.previous_player(self.current_player)
 
     def compute_valid_actions(self):
-        # TODO: let players all-in even when they can't raise
+
         actions = [Action.FOLD]
         call_amount = self.current_bet - self.current_player.current_wager
         min_raise = 2 * self.current_bet
@@ -205,6 +275,8 @@ class PokerGame:
             actions.append(Action.CALL)
         if self.current_bet > 0 and min_raise - self.current_player.current_wager < self.current_player.stack:
             actions.append(Action.RAISE)
+        if Action.RAISE not in actions:
+            actions.append(Action.ALL_IN)
 
         return actions
 
