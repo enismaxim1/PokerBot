@@ -202,11 +202,27 @@ class PokerGame:
             print(f"Player {i}: {player.name}, Stack: {player.stack}, Hand: {player.hand}")
         print(f"Current bet: {self.current_bet}")
 
+    # fix highest uncalled bet to align with highest called bet size
+    def clip_highest_bet(self):
+        wagers = [(player.current_wager, player) for player in self.unfolded_players]
+        wagers.sort(key = lambda p: p[0], reverse = True)
+        # if there is an uncalled bet
+        if len(wagers) >= 2 and wagers[0][0] > wagers[1][0]:
+            uncalled_bet, uncalled_player = wagers[0]
+            called_bet, _ = wagers[1]
+            diff = uncalled_bet - called_bet
+            uncalled_player.stack += diff
+            uncalled_player.current_wager -= diff
+            if uncalled_player not in self.active_players:
+                self.active_players.append(uncalled_player)
+            
     def update_wagers(self):
+        self.clip_highest_bet()
         for player in self.players:
            self.pot += player.current_wager
            player.update_wager()
         self.current_bet = 0
+        
 
     def clear_wagers(self):
         for player in self.players:
@@ -221,6 +237,9 @@ class PokerGame:
         self.active_players.remove(player)
 
     def perform_action(self, action, amount = 0):
+        if action not in self.compute_valid_actions():
+            return False
+
         next_player = self.next_player(self.current_player)
         if action == Action.FOLD:
             self.remove_player(self.current_player)
@@ -257,9 +276,11 @@ class PokerGame:
 
     
     def raise_bet(self, player, amount):
+        bet_raised = True if amount > self.current_bet else False
         self.current_bet = max(self.current_bet, amount)
         player.wager(amount - player.current_wager)
-        self.last_player = self.previous_player(self.current_player)
+        if bet_raised:
+            self.last_player = self.previous_player(self.current_player)
 
     def compute_valid_actions(self):
 
@@ -271,11 +292,11 @@ class PokerGame:
             actions.append(Action.CHECK)
         if self.current_bet == 0:
             actions.append(Action.BET)
-        if call_amount > 0 and self.current_player.stack >= call_amount:
+        if call_amount > 0 and self.current_player.stack > call_amount:
             actions.append(Action.CALL)
         if self.current_bet > 0 and min_raise - self.current_player.current_wager < self.current_player.stack:
             actions.append(Action.RAISE)
-        if Action.RAISE not in actions:
+        if Action.BET not in actions and Action.RAISE not in actions:
             actions.append(Action.ALL_IN)
 
         return actions

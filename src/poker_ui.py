@@ -16,7 +16,7 @@ class PokerUI:
         self.init_ui()
         self.load_card_images()
         self.load_table_image()
-        self.cooldown_map = {Era.BEGINNING: 0, Era.PREFLOP: 1000, Era.FLOP: 1000, Era.TURN: 1000, Era.RIVER: 1000, Era.PAYOUT: 5000}
+        self.cooldown_map = {Era.BEGINNING: 0, Era.PREFLOP: 1000, Era.FLOP: 2000, Era.TURN: 2000, Era.RIVER: 2000, Era.PAYOUT: 5000}
         self.last = pygame.time.get_ticks()
         self.buttons = {}
         self.text_input = None
@@ -97,16 +97,17 @@ class PokerUI:
         scaled_table_image = pygame.transform.smoothscale(self.table_image, (table_width, table_height))
         self.game_surface.blit(scaled_table_image, scaled_table_image.get_rect(center = (self.screen_size[0] // 2, self.screen_size[1] // 2)))
 
-        center_x, center_y = self.screen_size[0] // 2,  self.screen_size[1] // 3
-        radius = min(self.screen_size) // 3
+        center_x, center_y = self.screen_size[0] // 2,  self.screen_size[1] // 3 + 25
+        x_radius = min(self.screen_size) // 2.6
+        y_radius = x_radius // 1.3  # This will create an ellipse shape. Adjust the value to change the shape.
         num_players = len(self.poker_game.players)
         angle_step = 2 * math.pi / num_players
 
         for i, player in enumerate(self.poker_game.players):
             print(player)
             angle = i * angle_step
-            x = int(center_x + radius * math.cos(angle))
-            y = int(center_y + radius * math.sin(angle))
+            x = int(center_x + x_radius * math.cos(angle))
+            y = int(center_y + y_radius * math.sin(angle))
 
             if player == self.poker_game.current_player:
                 color = colors.YELLOW1  # Highlight the active player with a yellow color
@@ -130,7 +131,7 @@ class PokerUI:
 
         self.draw_cards(self.poker_game.community_cards, (center_x, center_y + 100))
         
-        self.draw_text(f"{self.poker_game.pot}", (center_x, center_y + 25))
+        self.draw_text(f"{self.poker_game.pot}", (center_x, center_y))
         pygame.time.wait(100)
 
 
@@ -194,18 +195,34 @@ class PokerUI:
                 if event.type == pygame.QUIT:
                     running = False
 
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                    if self.text_input:
-                        input, _ = self.text_input
-                        amount = int(input.value)
-                        if self.poker_game.perform_action(Action.RAISE, amount = amount):
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        if self.text_input:
+                            input, _ = self.text_input
+                            amount = int(input.value)
+                            if self.poker_game.perform_action(Action.RAISE, amount = amount):
+                                self.text_input = None
+                                self.draw_game()
+                    if event.key == pygame.K_ESCAPE:
+                        if self.text_input:
                             self.text_input = None
                             self.draw_game()
+                    if event.key == pygame.K_f:
+                        if self.poker_game.perform_action(Action.FOLD):
+                            self.draw_game()
+                    if event.key == pygame.K_k:
+                        if self.poker_game.perform_action(Action.CHECK):
+                            self.draw_game()
+                    if event.key == pygame.K_c:
+                        if self.poker_game.perform_action(Action.CALL):
+                            self.draw_game()
+                    if event.key == pygame.K_r:
+                        valid_actions = poker_game.compute_valid_actions()
+                        if Action.BET in valid_actions or Action.RAISE in valid_actions:
+                            if not self.input_active:
+                                # TODO: fix bug in line below
+                                self.create_input_prompt((button.x + button.width, button.y) )
 
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    if self.text_input:
-                        self.text_input = None
-                        self.draw_game()
 
                 # Handle button events
                 for button in self.buttons:
@@ -215,20 +232,20 @@ class PokerUI:
                             if not self.input_active:
                                 self.create_input_prompt((button.x + button.width, button.y) )
                         else:
-                            self.poker_game.perform_action(button.action)
-                            self.draw_game()
+                            if self.poker_game.perform_action(button.action):
+                                self.draw_game()
 
                         break
 
             self.update()
             pygame.display.flip()
-            clock.tick(60)
+            clock.tick(30)
 
         pygame.quit()
 
 if __name__ == "__main__":
     # Initialize your PokerGame instance here, e.g., poker_game = PokerGame(...)
-    players = [Player("Kan", 2000), Player("Maxim", 3000)]
+    players = [Player("Kan", 2000), Player("Maxim", 2000), Player("Daerin", 2000), Player("Andrew", 2000), Player("Taichi", 2000), Player("Bryan", 2000), Player("David", 2000), Player("Hwang", 2000)]
     poker_game = PokerGame(players)
     poker_ui = PokerUI(poker_game)
     poker_ui.run()

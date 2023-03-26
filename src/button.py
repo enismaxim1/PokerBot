@@ -31,4 +31,33 @@ class Button:
             if self.rect.collidepoint(event.pos):
                 return True
         return False
+
+    # def handle_event(self, event):
+    #     if event.type == pygame.KEYDOWN:
+    #                 if event.key == pygame.K_RETURN:
+    #                     if self.text_input:
+    #                         input, _ = self.text_input
+    #                         amount = int(input.value)
+    #                         if self.poker_game.perform_action(Action.RAISE, amount = amount):
+    #                             self.text_input = None
+    #                             self.draw_game()
+    #                 if event.key == pygame.K_ESCAPE:
+    #                     if self.text_input:
+    #                         self.text_input = None
+    #                         self.draw_game()
+    #                 if event.key == pygame.K_f:
+    #                     if self.poker_game.perform_action(Action.FOLD):
+    #                         self.draw_game()
+    #                 if event.key == pygame.K_k:
+    #                     if self.poker_game.perform_action(Action.CHECK):
+    #                         self.draw_game()
+    #                 if event.key == pygame.K_c:
+    #                     if self.poker_game.perform_action(Action.CALL):
+    #                         self.draw_game()
+    #                 if event.key == pygame.K_r:
+    #                     valid_actions = poker_game.compute_valid_actions()
+    #                     if Action.BET in valid_actions or Action.RAISE in valid_actions:
+    #                         if not self.input_active:
+    #                             # TODO: fix bug in line below
+    #                             self.create_input_prompt((button.x + button.width, button.y) )
     
