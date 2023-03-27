@@ -6,9 +6,18 @@ import math
 from button import Button
 import colors
 from pygame_textinput import TextInputVisualizer, TextInputManager
+from text_input import TextInput
 
 
 class PokerUI:
+
+    BUTTON_KEYS = {
+        Action.FOLD: pygame.K_f,
+        Action.CALL: pygame.K_c,
+        Action.RAISE: pygame.K_r,
+        Action.BET: pygame.K_r
+    }
+
     def __init__(self, poker_game, screen_size=(800, 650)):
         self.poker_game = poker_game
         self.screen_size = screen_size
@@ -27,6 +36,15 @@ class PokerUI:
         self.game_surface= pygame.Surface(self.screen_size, pygame.SRCALPHA)
         pygame.display.set_caption("Poker")
 
+    def non_raise_button_actions(self, button):
+        if self.poker_game.perform_action(button.action):
+            self.draw_game()
+
+    def bet_or_raise_button(self, button):
+        print("FUCK")
+        x,y = button.position
+        self.text_input = self.create_text_input((x + button.width / 2 + 30, y))
+
     def update_buttons(self):
         # Create buttons for each action
         button_width, button_height = 100, 40
@@ -36,13 +54,14 @@ class PokerUI:
 
         num_buttons = len(valid_actions)
 
+        button_actions = {action: self.non_raise_button_actions if action != Action.BET and action != Action.RAISE else self.bet_or_raise_button for action in valid_actions}
+        print(button_actions)
         self.buttons = [
-            Button(self.game_surface, button_x - ((num_buttons - 1) / 2 - i) * (button_width + 10), button_y, button_width, button_height, action.value.capitalize(), action = action)
+            Button(button_actions[action], self.game_surface, (button_x - ((num_buttons - 1) / 2 - i) * (button_width + 10), button_y), button_width, button_height, action.value.capitalize(), action = action, active_keys = [self.BUTTON_KEYS[action]] if action in self.BUTTON_KEYS else [])
             for i, action in enumerate(valid_actions)
         ]
 
         self.text_input = None
-
 
 
     def draw_text(self, text, position, font_size=16, color=(255, 255, 255)):
@@ -140,16 +159,18 @@ class PokerUI:
             self.update_buttons()
 
 
-    def update(self):
+    def update(self, events):
+
+        self.screen.blit(self.game_surface, (0,0))
+
+        if self.text_input:
+            self.dim_screen()
+            self.text_input.update(events)
 
         for button in self.buttons:
-            button.draw()
-        self.screen.blit(self.game_surface, (0,0))
-        if self.text_input:
-            input, pos = self.text_input
-            x,y = pos
-            _, size = input.font_object.size('100')
-            self.screen.blit(input.surface, (x, y - size / 2))
+            button.update()
+
+
         if poker_game.action_finished: 
             now = pygame.time.get_ticks()
             if now - self.last > self.cooldown_map[poker_game.current_era]:
@@ -157,26 +178,26 @@ class PokerUI:
                 poker_game.next_era()
                 self.draw_game()
 
+
+    def submit_input(self, input_text):
+        amount = int(input_text)
+        if self.poker_game.perform_action(Action.RAISE, amount = amount):
+            self.text_input = None
+            self.draw_game()
+
+    def remove_input(self):
+        self.text_input = None
+        self.update_buttons()
+
     def dim_screen(self):
         dark_rect = pygame.Surface(self.screen_size, pygame.SRCALPHA)
         dark_rect.fill((0, 0, 0, 128))
-        self.game_surface.blit(dark_rect, (0,0))
-    
+        self.screen.blit(dark_rect, (0,0))
 
     def create_text_input(self, position, font_size = 16):
-        font = pygame.font.Font("res/Mulish/static/Mulish-ExtraBold.ttf", font_size)
-        manager = TextInputManager(validator = lambda input: not input or input.isdigit() and int(input) < 999999)
-        input = TextInputVisualizer(manager=manager, font_object=font, font_color = colors.WHITE, cursor_color = colors.WHITE, cursor_blink_interval = 700)
-        self.text_input = (input, position)
-        return input
-
-    def create_input_prompt(self, position):
-        self.input_active = True
-        self.dim_screen()
-        x, y = position
-        text = 'Amount: '
-        self.draw_text(text, position)
-        self.create_text_input((x + 40, y))
+        for button in self.buttons:
+            button.active = False
+        return TextInput(self.screen, position, font_size, self.submit_input, self.remove_input, on_submit_keys=[pygame.K_RETURN], on_exit_keys = [pygame.K_ESCAPE])
 
 
     def run(self):
@@ -187,57 +208,18 @@ class PokerUI:
         while running:
             events = pygame.event.get()
             # Feed it with events every frame
-            if self.text_input:
-                input, _ = self.text_input
-                input.update(events)
 
             for event in events:
                 if event.type == pygame.QUIT:
                     running = False
 
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RETURN:
-                        if self.text_input:
-                            input, _ = self.text_input
-                            amount = int(input.value)
-                            if self.poker_game.perform_action(Action.RAISE, amount = amount):
-                                self.text_input = None
-                                self.draw_game()
-                    if event.key == pygame.K_ESCAPE:
-                        if self.text_input:
-                            self.text_input = None
-                            self.draw_game()
-                    if event.key == pygame.K_f:
-                        if self.poker_game.perform_action(Action.FOLD):
-                            self.draw_game()
-                    if event.key == pygame.K_k:
-                        if self.poker_game.perform_action(Action.CHECK):
-                            self.draw_game()
-                    if event.key == pygame.K_c:
-                        if self.poker_game.perform_action(Action.CALL):
-                            self.draw_game()
-                    if event.key == pygame.K_r:
-                        valid_actions = poker_game.compute_valid_actions()
-                        if Action.BET in valid_actions or Action.RAISE in valid_actions:
-                            if not self.input_active:
-                                # TODO: fix bug in line below
-                                self.create_input_prompt((button.x + button.width, button.y) )
-
-
-                # Handle button events
                 for button in self.buttons:
-                    if button.is_clicked(event):
+                    button.handle_event(event)
+                
+                if self.text_input:
+                    self.text_input.handle_event(event)
 
-                        if button.action == Action.BET or button.action == Action.RAISE:
-                            if not self.input_active:
-                                self.create_input_prompt((button.x + button.width, button.y) )
-                        else:
-                            if self.poker_game.perform_action(button.action):
-                                self.draw_game()
-
-                        break
-
-            self.update()
+            self.update(events)
             pygame.display.flip()
             clock.tick(30)
 

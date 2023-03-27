@@ -1,10 +1,13 @@
 import pygame 
 import colors
 
-class Button:
-    def __init__(self, screen, x, y, width, height, text, color=colors.GRAY40, hover_color = colors.GRAY60, font_size=18, active = True, action = None):
+class Button():
+    def __init__(self, onclick, screen, position, width, height, text, color=colors.GRAY40, hover_color = colors.GRAY60, font_size=18, active = True, action = None, active_keys = []):
+        self.onclick = onclick
         self.screen = screen
-        self.x, self.y, self.width, self.height = x, y, width, height
+        self.position = position
+        x, y = position
+        self.width, self.height = width, height
         self.rect = pygame.Rect(x - width / 2, y - height / 2, width, height)
         self.text = text
         self.hover_color = hover_color
@@ -12,6 +15,7 @@ class Button:
         self.font_size = font_size
         self.active = active
         self.action = action
+        self.active_keys = active_keys
 
     def draw(self):
         mouse_pos = pygame.mouse.get_pos()
@@ -25,39 +29,23 @@ class Button:
         text_surface = font.render(self.text, True, colors.WHITE)
         text_rect = text_surface.get_rect(center=self.rect.center)
         self.screen.blit(text_surface, text_rect)
+    
+    def update(self):
+        self.draw()
 
     def is_clicked(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
+            print(event.pos)
             if self.rect.collidepoint(event.pos):
                 return True
+            
+        if event.type == pygame.KEYDOWN:
+            if event.key in self.active_keys:
+                return True
         return False
-
-    # def handle_event(self, event):
-    #     if event.type == pygame.KEYDOWN:
-    #                 if event.key == pygame.K_RETURN:
-    #                     if self.text_input:
-    #                         input, _ = self.text_input
-    #                         amount = int(input.value)
-    #                         if self.poker_game.perform_action(Action.RAISE, amount = amount):
-    #                             self.text_input = None
-    #                             self.draw_game()
-    #                 if event.key == pygame.K_ESCAPE:
-    #                     if self.text_input:
-    #                         self.text_input = None
-    #                         self.draw_game()
-    #                 if event.key == pygame.K_f:
-    #                     if self.poker_game.perform_action(Action.FOLD):
-    #                         self.draw_game()
-    #                 if event.key == pygame.K_k:
-    #                     if self.poker_game.perform_action(Action.CHECK):
-    #                         self.draw_game()
-    #                 if event.key == pygame.K_c:
-    #                     if self.poker_game.perform_action(Action.CALL):
-    #                         self.draw_game()
-    #                 if event.key == pygame.K_r:
-    #                     valid_actions = poker_game.compute_valid_actions()
-    #                     if Action.BET in valid_actions or Action.RAISE in valid_actions:
-    #                         if not self.input_active:
-    #                             # TODO: fix bug in line below
-    #                             self.create_input_prompt((button.x + button.width, button.y) )
+    
+    def handle_event(self, event):
+        if self.active:
+            if self.is_clicked(event):
+                self.onclick(self)
     
