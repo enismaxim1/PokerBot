@@ -1,1 +1,2 @@
-A simple Poker UI.
+A simple clone of PokerNow. 
+
