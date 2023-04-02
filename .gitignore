@@ -1,0 +1,35 @@
+# General Python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+*.venv
+env/
+.Python
+
+# Jupyter Notebook files
+.ipynb_checkpoints/
+
+# Spyder files
+.spyderproject
+.spyproject
+.spyderworkspace
+.spyproject
+
+# PyCharm files
+.idea/
+
+# VSCode files
+.vscode/
+
+# macOS files
+.DS_Store
