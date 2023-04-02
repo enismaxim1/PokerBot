@@ -106,10 +106,6 @@ class PokerGame:
         self.deal_community_cards(1)
     
     def payout(self, payout_map):
-        print("payout reached")
-        print(payout_map)
-        for player in payout_map:
-            print(player, f"previous: {player.previous_wager}, current: {player.current_wager}")
         self.payout_map = payout_map
         for player, payout in payout_map.items():
             player.stack += payout
@@ -133,7 +129,6 @@ class PokerGame:
             full_hand = player.hand + self.community_cards
             player_hands[player] = poker_hands.best_hand(full_hand)
         
-        print("bets",sorted_bets)
 
         # loop through all pots
         for bet in sorted_bets:
@@ -143,7 +138,6 @@ class PokerGame:
                 amount = min(bet, all_player_wagers[player])
                 pot_size += amount
                 all_player_wagers[player] -= amount
-            print(f"bet: {bet}, pot size: {pot_size}")
             # eligible winners are unfolded players who have bet this much
             eligible_players = [player for player in self.unfolded_players if unfolded_player_wagers[player] >= bet]
 
@@ -159,7 +153,7 @@ class PokerGame:
                     winners.append(player)
 
             # Distribute the pot among the winners
-            print(winners)
+            print("winners", winners)
             split_pot = pot_size // len(winners)
             for winner in winners:
                 if winner not in payout_map:

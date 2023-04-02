@@ -41,7 +41,6 @@ class PokerUI:
             self.draw_game()
 
     def bet_or_raise_button(self, button):
-        print("FUCK")
         x,y = button.position
         self.text_input = self.create_text_input((x + button.width / 2 + 30, y))
 
@@ -55,7 +54,6 @@ class PokerUI:
         num_buttons = len(valid_actions)
 
         button_actions = {action: self.non_raise_button_actions if action != Action.BET and action != Action.RAISE else self.bet_or_raise_button for action in valid_actions}
-        print(button_actions)
         self.buttons = [
             Button(button_actions[action], self.game_surface, (button_x - ((num_buttons - 1) / 2 - i) * (button_width + 10), button_y), button_width, button_height, action.value.capitalize(), action = action, active_keys = [self.BUTTON_KEYS[action]] if action in self.BUTTON_KEYS else [])
             for i, action in enumerate(valid_actions)
@@ -123,7 +121,6 @@ class PokerUI:
         angle_step = 2 * math.pi / num_players
 
         for i, player in enumerate(self.poker_game.players):
-            print(player)
             angle = i * angle_step
             x = int(center_x + x_radius * math.cos(angle))
             y = int(center_y + y_radius * math.sin(angle))
@@ -161,14 +158,14 @@ class PokerUI:
 
     def update(self, events):
 
+        for button in self.buttons:
+            button.update()
+
         self.screen.blit(self.game_surface, (0,0))
 
         if self.text_input:
             self.dim_screen()
             self.text_input.update(events)
-
-        for button in self.buttons:
-            button.update()
 
 
         if poker_game.action_finished: 
@@ -227,7 +224,7 @@ class PokerUI:
 
 if __name__ == "__main__":
     # Initialize your PokerGame instance here, e.g., poker_game = PokerGame(...)
-    players = [Player("Kan", 2000), Player("Maxim", 2000), Player("Daerin", 2000), Player("Andrew", 2000), Player("Taichi", 2000), Player("Bryan", 2000), Player("David", 2000), Player("Hwang", 2000)]
+    players = [Player("Andrew", 2000), Player("Taichi", 2000), Player("Bryan", 2000), Player("David", 2000), Player("Hwang", 2000)]
     poker_game = PokerGame(players)
     poker_ui = PokerUI(poker_game)
     poker_ui.run()
