@@ -34,14 +34,14 @@ class Button():
         self.draw()
 
     def is_clicked(self, event):
-        print(event, self.active_keys)
-        print(event.type)
+        # print(event, self.active_keys)
+        # print(event.type)
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.rect.collidepoint(event.pos):
                 return True
             
         if event.type == pygame.KEYDOWN:
-            print(event.key)
+            # print(event.key)
 
             if event.key in self.active_keys:
                 return True

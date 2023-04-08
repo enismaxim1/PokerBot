@@ -32,3 +32,18 @@ class Card:
     
     def __repr__(self):
         return self.__str__()
+    
+    def to_dict(self):
+        return {
+            'rank': self.rank,
+            'suit': self.suit.value
+        }
+    
+    def __eq__(self, other):
+        if isinstance(other, Card):
+            return other.rank == self.rank and other.suit == self.suit
+        return False
+    
+    @classmethod
+    def from_dict(cls, dict):
+        return Card(dict['rank'], Suit(dict['suit']))

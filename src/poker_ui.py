@@ -1,12 +1,13 @@
 import os
+from poker_game_view import PokerGameView
 import pygame
 from poker_game import PokerGame, Action, Era
 from player import Player
 import math
 from button import Button
 import colors
-from pygame_textinput import TextInputVisualizer, TextInputManager
 from text_input import TextInput
+from queue import Queue
 
 
 class PokerUI:
@@ -14,21 +15,23 @@ class PokerUI:
     BUTTON_KEYS = {
         Action.FOLD: pygame.K_f,
         Action.CALL: pygame.K_c,
+        Action.CHECK: pygame.K_k,
         Action.RAISE: pygame.K_r,
         Action.BET: pygame.K_r
     }
 
-    def __init__(self, poker_game, screen_size=(800, 650)):
-        self.poker_game = poker_game
+    def __init__(self, network, game_view, screen_size=(800, 650)):
+        self.network = network
+        self.game_view = game_view
         self.screen_size = screen_size
         self.card_images = {}
         self.init_ui()
         self.load_card_images()
         self.load_table_image()
-        self.cooldown_map = {Era.BEGINNING: 0, Era.PREFLOP: 1000, Era.FLOP: 2000, Era.TURN: 2000, Era.RIVER: 2000, Era.PAYOUT: 5000}
         self.last = pygame.time.get_ticks()
         self.buttons = {}
         self.text_input = None
+        self.update_queue = Queue()
 
     def init_ui(self):
         pygame.init()
@@ -37,19 +40,23 @@ class PokerUI:
         pygame.display.set_caption("Poker")
 
     def non_raise_button_actions(self, button):
-        if self.poker_game.perform_action(button.action):
-            self.draw_game()
+        print(f"sending {button.action}")
+        reply = self.network.send({'action': button.action.value, 'amount': None})
+        # if reply:
+        #     game_view = PokerGameView(reply)
+        #     print("game drawn from non raise button")
+        #     self.update_queue.put(game_view)
 
     def bet_or_raise_button(self, button):
         x,y = button.position
         self.text_input = self.create_text_input((x + button.width / 2 + 30, y))
 
-    def update_buttons(self):
+    def update_buttons(self, game_view):
         # Create buttons for each action
         button_width, button_height = 100, 40
         button_x = self.screen_size[0] / 2
         button_y = self.screen_size[1] - button_height - 20
-        valid_actions = self.poker_game.compute_valid_actions()
+        valid_actions = game_view.valid_actions
 
         num_buttons = len(valid_actions)
 
@@ -100,11 +107,13 @@ class PokerUI:
             self.game_surface.blit(scaled_card_image, scaled_card_image.get_rect(center = (x + (i - (len(cards) - 1)/ 2) * (card_width + margin), y)))
 
 
-    def draw_game(self):
+    def draw_game(self, game_view):
+        print("game being drawn")
+        print(game_view)
         self.input_active = False
-        self.update_game_state()
+        self.update_game_state(game_view)
         self.game_surface.fill((34, 32, 33))
-
+        print("game surface filled")
 
         original_width, original_height = self.table_image.get_size()
         aspect_ratio = float(original_height) / float(original_width)
@@ -117,43 +126,45 @@ class PokerUI:
         center_x, center_y = self.screen_size[0] // 2,  self.screen_size[1] // 3 + 25
         x_radius = min(self.screen_size) // 2.6
         y_radius = x_radius // 1.3  # This will create an ellipse shape. Adjust the value to change the shape.
-        num_players = len(self.poker_game.players)
+        num_players = len(game_view.players)
         angle_step = 2 * math.pi / num_players
 
-        for i, player in enumerate(self.poker_game.players):
+        for i, player in enumerate(game_view.players):
             angle = i * angle_step
             x = int(center_x + x_radius * math.cos(angle))
             y = int(center_y + y_radius * math.sin(angle))
 
-            if player == self.poker_game.current_player:
+            if player == game_view.current_player:
                 color = colors.YELLOW1  # Highlight the active player with a yellow color
-            elif player not in self.poker_game.unfolded_players:
+            elif player not in game_view.unfolded_players:
                 color = colors.DARKGRAY
             else:
                 color = colors.WHITE
 
             self.draw_text(f"{player.name}", (x, y), color=color)
 
-            if poker_game.current_era == Era.PAYOUT and player in poker_game.payout_map:
-                score_differential = poker_game.payout_map[player] - player.previous_wager
+            if game_view.current_era == Era.PAYOUT and player.client_id in game_view.payout_map:
+                score_differential = game_view.payout_map[player.client_id] - player.previous_wager
                 self.draw_text(f"Stack: {player.stack} (+{score_differential})", (x, y + 20), color=color)
-            elif player not in poker_game.active_players and player in poker_game.unfolded_players:
+            elif player not in game_view.active_players and player in game_view.unfolded_players:
                 self.draw_text(f"All in", (x, y + 20), color=color)
             else:
                 self.draw_text(f"Stack: {player.stack}", (x, y + 20), color=color)
 
             self.draw_text(f"Wager: {player.current_wager}", (x, y + 40), color=color)
-            self.draw_cards(player.hand, (x, y + 90))
+            
+            if self.network.id == player.client_id:
+                self.draw_cards(game_view.visible_cards, (x, y + 90))
 
-        self.draw_cards(self.poker_game.community_cards, (center_x, center_y + 100))
+        self.draw_cards(game_view.community_cards, (center_x, center_y + 100))
         
-        self.draw_text(f"{self.poker_game.pot}", (center_x, center_y))
+        self.draw_text(f"{game_view.pot}", (center_x, center_y))
         pygame.time.wait(100)
 
 
-    def update_game_state(self):
-        if not poker_game.action_finished:
-            self.update_buttons()
+    def update_game_state(self, game_view):
+        if not game_view.action_finished:
+            self.update_buttons(game_view)
 
 
     def update(self, events):
@@ -168,23 +179,15 @@ class PokerUI:
             self.text_input.update(events)
 
 
-        if poker_game.action_finished: 
-            now = pygame.time.get_ticks()
-            if now - self.last > self.cooldown_map[poker_game.current_era]:
-                self.last = now
-                poker_game.next_era()
-                self.draw_game()
-
-
     def submit_input(self, input_text):
         amount = int(input_text)
-        if self.poker_game.perform_action(Action.RAISE, amount = amount):
-            self.text_input = None
-            self.draw_game()
+        self.network.send({'action': Action.RAISE.value, 'amount': amount})
 
     def remove_input(self):
         self.text_input = None
-        self.update_buttons()
+        # reactive buttons
+        for button in self.buttons:
+            button.active = True
 
     def dim_screen(self):
         dark_rect = pygame.Surface(self.screen_size, pygame.SRCALPHA)
@@ -200,9 +203,16 @@ class PokerUI:
     def run(self):
         clock = pygame.time.Clock()
         running = True
-        self.draw_game()
+        print("game drawn from initial drawing")
+        self.draw_game(self.game_view)
 
         while running:
+            while not self.update_queue.empty():
+                print("length of queue:", self.update_queue.qsize())
+                print("queue elements:", list(self.update_queue.queue))
+                update = self.update_queue.get()
+                self.draw_game(update)
+
             events = pygame.event.get()
             # Feed it with events every frame
 
@@ -222,9 +232,9 @@ class PokerUI:
 
         pygame.quit()
 
-if __name__ == "__main__":
-    # Initialize your PokerGame instance here, e.g., poker_game = PokerGame(...)
-    players = [Player("Andrew", 2000), Player("Taichi", 2000), Player("Bryan", 2000), Player("David", 2000), Player("Hwang", 2000)]
-    poker_game = PokerGame(players)
-    poker_ui = PokerUI(poker_game)
-    poker_ui.run()
+# if __name__ == "__main__":
+#     # Initialize your PokerGame instance here, e.g., poker_game = PokerGame(...)
+#     players = [Player("Andrew", 2000), Player("Taichi", 2000), Player("Bryan", 2000), Player("David", 2000), Player("Hwang", 2000)]
+#     poker_game = PokerGame(players)
+#     poker_ui = PokerUI(poker_game)
+#     poker_ui.run()

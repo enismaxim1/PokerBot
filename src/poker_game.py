@@ -1,6 +1,8 @@
+import json
 from deck import Deck
 from card import *
 from enum import Enum
+from player import Player
 import poker_hands
 
 class Action(Enum):
@@ -12,6 +14,7 @@ class Action(Enum):
     ALL_IN = 'all in'
 
 class Era(Enum):
+    WAITING = 'waiting'
     BEGINNING = 'beginning'
     PREFLOP = 'preflop'
     FLOP = 'flop'
@@ -20,30 +23,46 @@ class Era(Enum):
     PAYOUT = 'payout'
 
 class PokerGame:
-    def __init__(self, players, small_blind = 5, big_blind = 10):
+    def __init__(self, players = [], small_blind = 5, big_blind = 10):
         self.initialize_game(players, small_blind, big_blind)
-        self.dealer_pos = 0
-        self.dealer = players[self.dealer_pos]
     
     def initialize_game(self, players, small_blind, big_blind):
         self.players = players
-        self.active_players = players.copy()
-        self.unfolded_players = players.copy()
-        self.clear_wagers()
+        self.active_players = []
+        self.unfolded_players = []
         self.action_finished = True
-        self.deck = Deck()
+        self.deck = None
         self.community_cards = []
         self.small_blind = small_blind
         self.big_blind = big_blind
         self.pot = 0
+        self.current_era = Era.WAITING
+        self.current_player = None
+        self.dealer = None
+        self.dealer_pos = None
+
+    def begin_game(self, dealer_pos):
+        self.active_players = self.players.copy()
+        self.unfolded_players = self.players.copy()
+        self.clear_wagers()
+        self.action_finished = True
+        self.deck = Deck()
+        self.community_cards = []
+        self.pot = 0
         self.current_era = Era.BEGINNING
         self.current_player = None
+        self.last_player = None
+        self.dealer_pos = dealer_pos
+        self.dealer = self.players[dealer_pos]
 
     def next_era(self):
         era = self.current_era
         self.update_wagers()
 
+        if era == Era.WAITING:
+            self.begin_game(0)
         if era == Era.PAYOUT:
+            print("Moving to next hand!")
             self.next_hand()
         # if everyone else folded, skip to payout era
         elif len(self.unfolded_players) == 1:
@@ -112,6 +131,9 @@ class PokerGame:
         self.pot = 0
 
         self.current_era = Era.PAYOUT
+        self.current_player = None
+        print(self.action_finished)
+        print(len(self.players))
     
     def showdown(self):
         payout_map = {}
@@ -165,22 +187,35 @@ class PokerGame:
         return payout_map
 
 
-
     def next_hand(self):
-        self.initialize_game(self.players, self.small_blind, self.big_blind)
+        dealer_pos = (self.dealer_pos + 1) % len(self.players)
+        self.begin_game(dealer_pos)
         for player in self.players:
             if player.stack == 0:
                 player.stack = self.big_blind * 200
-        self.dealer_pos = (self.dealer_pos + 1) % len(self.players)
-        self.dealer = self.players[self.dealer_pos]
+        
 
     def next_player(self, player):
-        player_index = self.active_players.index(player)
-        return self.active_players[(player_index + 1) % len(self.active_players)]
+        # returns the first active player after the given player
+        player_index = self.players.index(player)
+        next_player_index = (player_index + 1) % len(self.players)
+        while next_player_index != player_index:
+            next_player = self.players[next_player_index]
+            if next_player in self.active_players:
+                return next_player
+            next_player_index = (next_player_index + 1) % len(self.players)
+        return None
 
     def previous_player(self, player):
-        player_index = self.active_players.index(player)
-        return self.active_players[(player_index - 1) % len(self.active_players)]
+        # returns the first active player before the given player
+        player_index = self.players.index(player)
+        previous_player_index = (player_index - 1) % len(self.players)
+        while previous_player_index != player_index:
+            previous_player = self.players[previous_player_index]
+            if previous_player in self.active_players:
+                return previous_player
+            previous_player_index = (previous_player_index - 1) % len(self.players)
+        return None
     
     def fix_postflop_positions(self):
         self.current_player = self.next_player(self.dealer)
@@ -231,10 +266,14 @@ class PokerGame:
         self.active_players.remove(player)
 
     def perform_action(self, action, amount = 0):
+
+        if action == Action.RAISE:
+            if self.current_bet == 0:
+                action = Action.BET
+
         if action not in self.compute_valid_actions():
             return False
 
-        next_player = self.next_player(self.current_player)
         if action == Action.FOLD:
             self.remove_player(self.current_player)
             self.unfolded_players.remove(self.current_player)
@@ -260,14 +299,58 @@ class PokerGame:
         if self.current_player.stack == 0:
             self.remove_player(self.current_player)
 
-        if self.last_player == self.current_player:
-            self.current_player = None
-            self.action_finished = True
-        else:
-            self.current_player = next_player
-
+        self.action_finished = True
         return True
 
+    def next_action(self):
+        print("next action!")
+        if self.current_era in [Era.WAITING, Era.BEGINNING, Era.PAYOUT] or self.last_player == self.current_player or len(self.active_players) == 1:
+            self.next_era()
+        else:
+            self.current_player = self.next_player(self.current_player)
+            self.action_finished = False
+
+    def process_client_input(self, client_id, data):
+        # Process client input (e.g., perform the corresponding action)
+        data_dict = json.loads(data)
+
+        # if client is pinging for game state
+        if 'ping' in data_dict:
+            pass
+        # if client is requesting to join the game
+        if 'join' in data_dict:
+            player = Player.from_dict(data_dict['join'])
+            self.players.append(player)
+        # if client is performing an action
+        if 'action' in data_dict:
+            action = Action(data_dict['action'])
+            amount = data_dict['amount']
+            self.perform_action(action, amount)
+
+        # Get the updated game state and return it
+        return self.get_game_state(client_id)
+    
+    # returns a JSON game state
+    def get_game_state(self, client_id):
+        client_hand = []
+        for player in self.players:
+            if player.client_id == client_id:
+                client_hand = player.hand
+        print(self.action_finished)
+        return json.dumps({
+            'current_era': self.current_era.value,
+            'community_cards': [card.to_dict() for card in self.community_cards],
+            'visible_cards': [card.to_dict() for card in client_hand],
+            'players': [player.to_dict() for player in self.players],
+            'active_players': [player.to_dict() for player in self.active_players],
+            'unfolded_players': [player.to_dict() for player in self.unfolded_players],
+            'valid_actions': [action.value for action in self.compute_valid_actions()] if (not self.action_finished and self.current_player.client_id == client_id)  else [],
+            'current_player': self.current_player.to_dict() if self.current_player else None,
+            'action_finished': self.action_finished,
+            'pot': self.pot,
+            'dealer_pos': self.dealer_pos,
+            'payout_map': {player.client_id: self.payout_map[player] for player in self.payout_map} if self.current_era == Era.PAYOUT else None
+        })
     
     def raise_bet(self, player, amount):
         bet_raised = True if amount > self.current_bet else False
@@ -277,7 +360,9 @@ class PokerGame:
             self.last_player = self.previous_player(self.current_player)
 
     def compute_valid_actions(self):
-
+        if self.current_era == Era.BEGINNING:
+            return []
+        
         actions = [Action.FOLD]
         call_amount = self.current_bet - self.current_player.current_wager
         min_raise = 2 * self.current_bet
