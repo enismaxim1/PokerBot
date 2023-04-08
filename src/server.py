@@ -7,7 +7,7 @@ from player import Player
 from time import time
 from poker_game import Era, PokerGame
 
-IP = socket.gethostbyname(socket.gethostname())
+IP = '127.0.0.1'
 PORT = 5555
 COOLDOWN_MAP = {Era.WAITING: 0, Era.BEGINNING: 1.5, Era.PREFLOP: 1, Era.FLOP: 2, Era.TURN: 2, Era.RIVER: 2, Era.PAYOUT: 2}
 
